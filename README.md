@@ -3,11 +3,17 @@
 ### Table of Contents
 Summary<br/>
 Pre-requisites: What you need to get started<br/>
-Part 1: Queries running slowly<br/>
-Part 2: Joins<br/>
-Part 3: Troubleshooting<br/>
-Part 4: Query performance improvements<br/>
-Part 5: Query analysis
+Part 1 – Loading data into Azure SQL Data Warehouse<br/>
+Part 2 – Load Dimension tables<br/>
+Part 3 – Create Partitioned Fact Table<br/>
+Part 4 – Load data into partitioned staging tables from WASB<br/>
+Part 5 – Copy Data into Correctly formatted tables via CTAS<br/>
+Part 6 – Dynamic Management Views<br/>
+Part 7: Queries running slowly<br/>
+Part 8: Joins<br/>
+Part 9: Troubleshooting<br/>
+Part 10: Query performance improvements<br/>
+Part 11: Query analysis
 
 ## Summary
 Over the course of this lab you will look for inefficiencies that are causing sub-optimal performance.<br/>
@@ -48,7 +54,139 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy ByPass
 10.	Replace **<your_database>** with your **database** name.<br/>
     <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/sql02.jpg"/><br/>
     
-## Part 1: Queries running slowly
+### Part 1 – Loading Blob storage data into Azure SQL Data Warehouse
+We have created our SQL Data Warehouse and now we want to load data into it.  We can do this through the traditional ways of ETL and tooling such as SQL Server Integration Services or third-party tooling.  However, today we are going to use Polybase. Your source data has been precreated and is in your Azure Blob Storage account.<
+ 
+1. From your virtual machine navigate to the **Azure portal** within the web browser which should be open from the last exercise.  If not, open the browser and navigate to https://portal.azure.com<br/>
+2. Open the **Azure SQL Data Warehouse** blade from the tile on the portal dashboard (you pinned it in the earlier exercise).<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld1.jpg"/><br/>
+3. Looking at the **Overview** blade you can see the **Common Tasks** as shown in the screen shot.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld2.jpg"/><br/>
+4. Click the **Open in Visual Studio** button.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld3.jpg"/><br/>
+```
+Note: Before opening Visual Studio click on Configure your firewall to make sure that your ClientIP has been added to the rules.
+```
+
+5. Click **Open Link** on the dialog box that ap-pears. **Visual Studio** will now launch.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld4.jpg"/><br/>
+6. Sign in with your given **Azure Credentials**.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld5.jpg"/><br/>
+7. Fill in the **password** specified in **Environment Detail Page**.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/password.jpg"/><br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld6.jpg"/><br/>
+8. Click **Connect**.<br/>
+9. **Expand** the object tree within the **SQL Server** object explorer pane.<br/>
+10. Right click the database name and select **New Query**.  A new query window will open<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld7.jpg"/><br/>
+11. Open the **Setup** file that can be found in the **LabContent** folder in your drive C:\ under **Day-1\05.SQLDW** - Loading lab from visual studio.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld8.jpg"/><br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld.jpg"/><br/>
+12. Copy the content of **Setup** script and paste it in new query window.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld9.jpg"/><br/>
+13. Execute the **Query**.
+
+### Part 2 – Load Dimension tables
+Now, we have created our external data source we can query and load the data we have in the Azure Blob Store.In the following lab we will load dimension tables into our SQL DW. Dimension tables are often a good first step because they are relatively small and this will allow you to gain an understanding of how to load data into SQL DW from WASB. 
+
+1. Open the **Dimensions** file that can be found in the **LabContent** folder in your drive C:\ under **Day-1\05.SQLDW** - Loading lab from visual studio.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld8.jpg"/><br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/dimensions.jpg"/><br/>
+2. Copy the **Dimensions.sql** script and replace it with the existing script in query window.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld10.jpg"/><br/>
+2. Execute the **Query**.<br/>
+3. Go through the Content inside the dimension for understanding the script:<br/>
+a. Using the following script to create an external table called Aircraft_IMPORT
+```
+Note: 
+•	data_source - References the Ex-ternal Data Source that you want to read from
+
+•	File_format - References the File Format that the data is in
+
+•	location - Specifies the directory lo-cation that you want to read from. PolyBase traverses all childern di-rectories and files from a stated filepath.
+```
+```
+CREATE EXTERNAL TABLE Aircraft_IMPORT
+   ([id] [int] NULL,
+	[TailNum] [varchar](15) NULL,
+	[Type] [varchar](50) NULL,
+	[Manufacturer] [varchar](50) NULL,
+	[IssueDate] [varchar](15) NULL,
+	[Model] [varchar](20) NULL,
+	[Status] [char](5) NULL,
+	[AircraftType] [varchar](30) NULL,
+	[EngineType] [varchar](20) NULL,
+	[Year] [smallint] NULL)
+WITH
+(
+DATA_SOURCE = MastData_Stor,     
+FILE_FORMAT = pipe,              
+LOCATION = 'aircraft'
+)
+```
+
+b. Use the following **CTAS** script to create the table and load data<br/>
+```
+Note:
+* 	Make sure that you select * From Aircraft_IMPORT  you just created.<br/>
+* 	Run the following script to update Statstics<br/>
+* 	Auto update statistics can take care of automatically updating single column stats, but in this case it is multi-column stats
+```
+```
+CREATE TABLE Dim_Aircraft
+WITH
+(
+  DISTRIBUTION = ROUND_ROBIN
+, CLUSTERED INDEX (id)                      
+)
+AS SELECT * FROM Aircraft_IMPORT    
+CREATE STATISTICS Aircraft_Stat 
+ON 
+Dim_Aircraft (id, type, manufacturer)
+```
+3. Remainder code will load the all dimension tables.
+
+### Part 3 – Create Partitioned Fact Table
+To effectively leverage a partition swap load, a table has to exist with an exisiting partition scheme. To do this you must create an empty table with a partitioning scheme.
+
+1. To create an empty table partioned by DateID. Open the **2 - Create Fact Table** file that can be found in the **LabContent** folder in your drive C:\ under **Day-1\05.SQLDW** - Loading lab from visual studio.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld8.jpg"/><br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/create.jpg"/><br/>
+2. Copy the 2 - **Create Fact Table.dsql** script and replace it with existing content in query window.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld11.jpg"/><br/>
+3. To load the staging tables from WASB into SQDL DW. 
+4. Open the **3 - InitialFactLoad.dsql** file that can be found in the **LabContent** folder in your drive C:\ under **Day-1\05.SQLDW** - Loading lab from visual studio.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld8.jpg"/><br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/initial.jpg"/><br/>
+5. Copy the 3 - **InitialFactLoad.dsql** script and replace it with existing content in query window <br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld12.jpg"/><br/>
+```
+Note: 
+•	We are using Round_Robin distribution and a Heap because we want to ensure that the load occurs as quickly as possible. Remember ELT.
+•	Use CTAS external table and create a local table.
+```
+
+### Part 4 – Load data into partitioned staging tables from WASB
+In the next set of steps we are going to take the staging tables we created in part 3 and prep the data for a partition switch.
+
+1. Open the **4 - PartitionStagingTables.dsql** file that can be found in the **LabContent** folder in your drive C:\ under **Day-1\05.SQLDW** - Loading lab from visual studio.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld8.jpg/><br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/Partition.jpg"/><br/>
+2. To complete the staging table prep. Copy the script and replace it with existing content in query window <br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld14.jpg"/><br/>
+
+### Part 5 – Copy Data into Correctly formatted tables via CTAS
+Now that we have a set of partitioned tables and an empty fact table, we can start doing partition switches into the table.
+
+1. The next script that you will run loops through the partitioned tables and dynamically switches the partitions.  Because this operation is on the metadata, there is relatively little downtime for the amount of data "loaded" into the production fact table.
+
+Open the 5 -**LoadWithPartitionSwitch.dsql** file that can be found in the **LabContent** folder in your drive C:\ under **Day-1\05.SQLDW** - Loading lab from visual studio.<br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld8.jpg"/><br/>
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/load.jpg"/><br/>
+2. To switch the partitions on your empty fact table. Run the following script that is part of 5 -**LoadWithPartitionSwitch.dsql** script and replace it with existing content in query window.
+    <img src="https://github.com/SpektraSystems/Analytics-Airlift/blob/master/images/ld13.jpg"/><br/>
+
+## Part 6: Queries running slowly
 Your user comes to you and says “My query is running slow. I’m not sure why, because I’m not selecting very many rows. Can you help me figure out why?
 
 1.	Open a PowerShell window.<br/>
@@ -115,7 +253,7 @@ At step 11, you want to pick out the long-running step based on total_elapsed_ti
 At step 14, you should be able to use exec_requests in the same way you did before to get the query text and see that we are now querying table 'dbo.lineitem_3'. You should look at sys.tables or object explorer in SSMS/SSDT to see the differences between this table and the previous one. You should notice that lineitem_3 is a distributed table whereas Lineitem_2 was an external table. The new plan in request_steps no longer has the Hadoop shuffle because the data is already in SQLDW.<br/><br/>
 This should illustrate that when you are going to be using external tables repeatedly, it is much more efficient if you first import the table(s) into SQLDW then run the queries on the local tables. Otherwise, every query that touches the external table will have to import the table into tempdb as part of the plan before being able to execute the query.
 
-## Part 2: Joins
+## Part 7: Joins
 Now that you’ve got the hang of things, let’s try the same process on the next exercise. 
 Again, your user comes to you with questions, complaining that they are joining two of their most important tables together, and SQL DW just isn’t performing as well as they had expected. 
 
@@ -159,7 +297,7 @@ At step 10, you can see that we are performing 5 broadcast moves and 1 shuffle m
 At step 12, you are comparing the fast plan to the slow plan. You can see in the fast plan that we now have 4 broadcast moves (instead of 5) and 1 shuffle. The table that is no longer being broadcasted is that large table we noticed in step 10. We can get the tables being queries from exec_requests, then look at sys.tables or object explorer to see what kind of tables they are. You will see that the fast version has all hash distributed tables, while the slow version has round robin tables.<br/><br/>
 In general, you want large fact tables to be distributed tables. In this query both the orders and lineitem tables are large fact tables. If we are joining them together then it is best if they are distribution-compatible, which means distributed on the same key. This way each distribution has just a small slice of data to work with. In the fast version, both of these tables are distributed on orderkey. Round robin tables are never distribution-compatible, so the slow plan has to perform some sort of movement, like a broadcast, to make them distribution compatible before performing the join. The fast version shuffle will be faster because of the smaller input data volume.
 
-## Part 3: Troubleshooting Nuke)
+## Part 8: Troubleshooting Nuke)
 Again, your user comes to you with questions, saying “I’ve just loaded my data and my queries are running slow than on SQL Server! What am I missing here?”
 
 1.	Open a PowerShell window.<br/>
@@ -199,7 +337,7 @@ In step 12, you can see that this large broadcast is no longer there. If you com
 Further, if you run the query provided to get details about the table, you will see that for lineitem_1, the CTL_row_count is 1,000, but the cmp_row_count is ~60 million. 1,000 is the default value for statistics on the control node, so this means that statistics were never manually created. The distributed plan was created assuming it could broadcast this table because there were only 1,000 rows, but in reality there were 60 million rows, which caused our long-running step.<br/><br/>
 This illustrates how the absence of statistics or statistics not being up to date can affect the distributed plan.<br/>
 
-## Part 4: Query performance improvements
+## Part 9: Query performance improvements
 Now that your user has got all of their data loaded and organized they are trying out some of their more complex queries.  Check this exercise to see if there are any improvements they can make to decrease their query runtime.
 
 1.	Open a PowerShell window.<br/>
@@ -236,7 +374,7 @@ For a query like this we cannot improve the MPP plan, so the next option to look
 Once you are at step 11, you should have looked at exec_requests and noticed that it was now running in LargeRC and the execution time was faster. These test queries are pretty fast running because the execution time is low, but for larger queries this can make a big difference. The default resource class is small. Remember, as you increase resource class you also decrease concurrency, so testing is required.<br/><br/>
 If you want to change the resource class for a query you would use sp_addrolemember and sp_droprolemember
 
-### Part 5: Query analysis
+### Part 10: Query analysis
 Now that you’ve helped your user with some of their initial issues, they’re beginning to bring some of their analysts onto the system – but some analysts are complaining that their queries are taking very long to run or don’t seem to be running at all.
 
 1.	Open a PowerShell window.<br/>
@@ -288,5 +426,4 @@ This exercise tries to simulate an active workload on your data warehouse. It cr
 When you reached to step 9 on Slow execution exercise, you will notice that your query is in the queue (“Suspended”) and does not “Running”. You can check wait stats and see that what is your query is waiting on “UserConcurrencyResourceType” which means that it is waiting for enough concurrency slots become available.<br/><br/>
 When you check dm_pdw_exec_requests you will notice that this query is running on largerc resource class. In previous example we talk about using higher resource classes allow your query to have more memory resources. But this will result in more memory consumption from the overall system and resulted in less concurrent query executions. So you need to be careful about which resource classes you are using for executing your queries. Always test your queries with your actual workload.<br/><br/>
 On faster version of this exercise you will notice that your queries might again queued but once there is enough concurrency slots available it will go through the execution. You will see that your query runs 3 times but at every execution it waits on the queue. You can check the queue waiting time by comparing start_time and submit_time in dm_pdw_exec_requests DMV.
-
 
